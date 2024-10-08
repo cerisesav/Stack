@@ -6,12 +6,15 @@ typedef uint64_t Canary_t;
 #define CANARY_VALUE 0xDEAD
 #define FILL_VALUE -666
 // #define CANARY
+// #define HASH
 
 enum CodeError {
     Overflow,
+    Size,
     Underflow,
     NullPointer,
     CanaryError,
+    HashError,
     NoError
 };
 
@@ -23,6 +26,7 @@ struct Stack
     size_t capacity;
     CodeError err;
     Canary_t RIGHT_CANARY;
+    uint64_t hash;
 };
 
 CodeError StackPush(Stack* stk, StackElem_t elem);
@@ -33,14 +37,8 @@ void StackCtor(Stack* stk);
 
 void StackDtor(Stack* stk);
 
-void StackAssert(Stack* stk);
-
-const char* StackError(Stack* stk);
-
 StackElem_t* SizeUpStack(Stack* stk);
 
 StackElem_t* SizeDownStack(Stack* stk);
-
-void StackDump(struct Stack* stk, const char *file, int line, const char *function);
 
 #endif

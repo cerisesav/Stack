@@ -2,19 +2,19 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-// canary
-// void *
-
 #include "stack.h"
+#include "error.h"
 
 CodeError StackPush(Stack* stk, StackElem_t elem)
 {
-    #ifdef CANARY
-        StackAssert(stk);
-    #endif
+    StackAssert(stk);
 
     if (stk->size >= stk->capacity)
+    {
         stk->data = SizeUpStack(stk);
+        stk->data[stk->size] = elem;
+        stk->size++;
+    }
 
     else
     {
@@ -23,7 +23,11 @@ CodeError StackPush(Stack* stk, StackElem_t elem)
     }
 
     #ifdef CANARY
-        StackAssert(stk);
+    StackAssert(stk);
+    #endif
+
+    #ifdef HASH
+        stk->hash = StackHashFNV(stk);
     #endif
 
     return stk->err;
@@ -31,13 +35,12 @@ CodeError StackPush(Stack* stk, StackElem_t elem)
 
 CodeError StackPop(Stack* stk, StackElem_t* DeletedValue)
 {
-    #ifdef CANARY
-        StackAssert(stk);
-    #endif
+    StackAssert(stk);
 
     if (stk->size > 0)
     {
         *DeletedValue = stk->data[--stk->size];
+        stk->data[stk->size--] = FILL_VALUE;
 
         if (stk->capacity/stk->size > 2)
             stk->data = SizeDownStack(stk);
@@ -47,8 +50,11 @@ CodeError StackPop(Stack* stk, StackElem_t* DeletedValue)
     {
         stk->err = Underflow;
     }
-    #ifdef CANARY
-        StackAssert(stk);
+
+    StackAssert(stk);
+
+    #ifdef HASH
+        stk->hash = StackHashFNV(stk);
     #endif
 
     return stk->err;
@@ -58,11 +64,13 @@ CodeError StackPop(Stack* stk, StackElem_t* DeletedValue)
 void StackCtor(Stack* stk)
 {
     #ifdef CANARY
-
     stk->LEFT_CANARY = CANARY_VALUE;
     stk->RIGHT_CANARY = CANARY_VALUE;
 
     #endif
+
+    stk->hash = 0;
+
     stk->capacity = 10;
     int size = 0;
 
@@ -75,12 +83,15 @@ void StackCtor(Stack* stk)
     if (stk->capacity == 0)
     {
         stk->data = nullptr;
+        stk->err = NullPointer;
     }
 
     else
     {
-        stk->data = (StackElem_t*)calloc(size, 1);
-        if (!stk->data) {
+        stk->data = (StackElem_t*)calloc(size, sizeof(StackElem_t));
+
+        if (!stk->data)
+        {
             stk->err = NullPointer;
         }
     }
@@ -91,9 +102,15 @@ void StackCtor(Stack* stk)
     *((Canary_t*)stk->data - 1) = CANARY_VALUE;
     *((Canary_t*)stk->data + stk->capacity) = CANARY_VALUE;
     #endif
+
     stk->size = 0;
 
     stk->err = NoError;
+
+    #ifdef HASH
+        stk->hash = StackHashFNV(stk);
+    #endif
+
     StackAssert(stk);
 }
 
@@ -118,42 +135,9 @@ void StackDtor(Stack* stk)
     stk->capacity = -1;
 }
 
-
-void StackDump(struct Stack* stk, const char *file, int line, const char *function)
-{
-    printf("\nTime is %s\n", __TIME__);
-    printf("StackDump called from %s (%d) %s\n", function, line, file);
-    printf("Stack[%p] \"stk\" in function - %s.\n\n", (void*)stk, function);
-
-    printf("--------------------------------------------------------------------------\n");
-    printf("Struct:\n");
-    printf("\tsize = %d\n", stk->size);
-    printf("\tcapacity = %zu\n", stk->capacity);
-    printf("\tAddress of data[] = %p\n", (void*)stk->data);
-
-    for (size_t i = 0; i < stk->size; i++) {
-        printf("\tdata[%zu] = %lf\n", i, stk->data[i]);
-    }
-
-    printf("--------------------------------------------------------------------------\n");
-}
-
-void StackAssert(Stack* stk)
-{
-    if (stk->err != NoError)
-    {
-        printf("Error: %s\n", StackError(stk));
-        StackDumpMacro(stk);
-        assert(0);
-    }
-
-    StackDumpMacro(stk);
-}
-
-
 StackElem_t* SizeUpStack(Stack* stk)
 {
-
+    StackAssert(stk);
     if (stk->size > 1000)
         stk->capacity *= 1.05;
     else if (stk->size > 100)
@@ -165,7 +149,7 @@ StackElem_t* SizeUpStack(Stack* stk)
         size_t new_size = stk->capacity * sizeof(StackElem_t) + 2 * sizeof(Canary_t);
         stk->data = (StackElem_t*)realloc((Canary_t*)stk->data - 1, new_size);
     #else
-        stk->data = (StackElem_t*)realloc(stk->data, stk->capacity);
+        stk->data = (StackElem_t*)realloc(stk->data, stk->capacity * sizeof(StackElem_t));
     #endif
 
     if (!stk->data)
@@ -175,6 +159,17 @@ StackElem_t* SizeUpStack(Stack* stk)
         stk->data = (StackElem_t*)((Canary_t*)stk->data + 1);
         *((Canary_t*)stk->data - 1) = CANARY_VALUE;
         *((Canary_t*)stk->data + stk->capacity) = CANARY_VALUE;
+    #endif
+
+    for (size_t i = stk->size; i < stk->capacity; i++)
+        stk->data[i] = FILL_VALUE;
+
+    #ifdef CANARY
+        StackAssert(stk);
+    #endif
+
+    #ifdef HASH
+        stk->hash = StackHashFNV(stk);
     #endif
 
     return stk->data;
@@ -192,7 +187,7 @@ StackElem_t* SizeDownStack(Stack* stk)
         size_t new_size = stk->capacity * sizeof(StackElem_t) + 2 * sizeof(Canary_t);
         stk->data = (StackElem_t*)realloc((Canary_t*)stk->data - 1, new_size);
     #else
-        stk->data = (StackElem_t*)realloc(stk->data, stk->capacity);
+        stk->data = (StackElem_t*)realloc(stk->data, stk->capacity * sizeof(StackElem_t));
     #endif
 
     if (!stk->data)
@@ -204,19 +199,10 @@ StackElem_t* SizeDownStack(Stack* stk)
         *((Canary_t*)stk->data + stk->capacity) = CANARY_VALUE;
     #endif
 
-    return stk->data;
-}
+    #ifdef HASH
+        stk->hash = StackHashFNV(stk);
+    #endif
 
-const char* StackError(Stack* stk)
-{
-    switch (stk->err)
-    {
-        case Overflow: return "Stack Overflow";
-        case Underflow: return "Stack Underflow";
-        case NoError: return "Stack is working fine";
-        case NullPointer: return "Null Pointer Error";
-        case CanaryError: return "Canary was poisoned";
-        default: return "Unknown Error";
-    }
+    return stk->data;
 }
 
