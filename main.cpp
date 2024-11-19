@@ -2,20 +2,17 @@
 #include <stdio.h>
 #include "stack.h"
 #include "error.h"
+#include "processor.h"
 
 int main()
 {
     struct Stack stk = {};
     struct Stack *ptr_stk;
     ptr_stk = &stk;
-    StackElem_t DeletedValue = 0;
 
     StackCtor(ptr_stk);
 
-    for (int j = 0; j < 30; j++)
-    {
-        StackPush(ptr_stk, j * j);
-    }
+    read(ptr_stk);
 
     StackDtor(ptr_stk);
 }

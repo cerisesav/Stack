@@ -32,6 +32,7 @@ struct Stack
 CodeError StackPush(Stack* stk, StackElem_t elem);
 
 CodeError StackPop(Stack* stk, StackElem_t* DeletedValue);
+int StackPopV(Stack* stk);
 
 void StackCtor(Stack* stk);
 
